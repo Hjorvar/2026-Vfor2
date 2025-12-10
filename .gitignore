@@ -1,0 +1,8 @@
+# Node dependencies (Risastórt drasl)
+node_modules/
+
+# Compiled code (Tölvan býr þetta til, við viljum ekki geyma það)
+dist/
+
+# Mac OS rusl (ef einhver er á Mac)
+.DS_Store
