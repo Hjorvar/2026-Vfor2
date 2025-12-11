@@ -5,25 +5,46 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kvikmyndasafnið</title>
     <link rel="stylesheet" href="style.css">
-    
     <script type="module" src="../dist/index.js"></script>
 </head>
 <body>
     <header>
         <h1>🎬 Kvikmyndasafnið</h1>
         
-        <div class="search-container">
-            <input 
-                type="text" 
-                id="search-input" 
-                placeholder="Leitaðu að mynd eða flokki..."
-                autocomplete="off"
-            >
+        <div class="controls">
+            <div class="search-container">
+                <input type="text" id="search-input" placeholder="Leita...">
+            </div>
+            <button id="add-movie-btn" class="btn-primary">Bæta við +</button>
         </div>
     </header>
 
     <main>
         <div class="movie-grid" id="movie-container"></div>
     </main>
+
+    <dialog id="add-movie-modal">
+        <form id="add-movie-form">
+            <h2>Ný Bíómynd</h2>
+            
+            <label>Titill:</label>
+            <input type="text" name="title" required placeholder="Dæmi: Batman">
+
+            <label>Ár:</label>
+            <input type="number" name="year" required placeholder="2024">
+
+            <label>Flokkur:</label>
+            <input type="text" name="genre" placeholder="Action">
+
+            <label>Poster (Emoji):</label>
+            <input type="text" name="poster" placeholder="🦇">
+
+            <div class="modal-actions">
+                <button type="button" id="close-modal-btn">Hætta við</button>
+                <button type="submit" class="btn-primary">Vista</button>
+            </div>
+        </form>
+    </dialog>
+
 </body>
 </html>

@@ -1,4 +1,3 @@
-// Interface fyrir bíómynd (Nú með ID)
 interface Movie {
     id: number;
     title: string;
@@ -7,88 +6,98 @@ interface Movie {
     poster: string;
 }
 
-// 1. Náum í elementin úr HTML
+// Náum í elementin
 const container = document.getElementById('movie-container');
 const searchInput = document.getElementById('search-input') as HTMLInputElement;
 
-// 2. Aðalfallið: Sækir myndir (tekur við valfrjálsu leitarorði)
+const addMovieBtn = document.getElementById('add-movie-btn');
+const closeModalBtn = document.getElementById('close-modal-btn');
+const modal = document.getElementById('add-movie-modal') as HTMLDialogElement;
+const form = document.getElementById('add-movie-form') as HTMLFormElement;
+
+// 1. Sækja myndir (GET)
 async function getMovies(query: string = '') {
     if (!container) return;
-
     try {
-        // Sýna loading state ef við erum að leita
-        // (Ef þetta er fyrsta hleðsla viljum við kannski ekki hreinsa allt strax, en gerum það hér til einföldunar)
-        if (!query) {
-            container.innerHTML = '<p class="loading">Sæki bíómyndir...</p>';
-        }
-
-        // Búum til slóðina
-        // Dæmi: http://localhost:3000/api/movies?search=matrix
         let url = 'http://localhost:3000/api/movies';
+        if (query) url += `?search=${query}`;
         
-        if (query) {
-            url += `?search=${query}`;
-        }
-
-        // Sækjum gögnin
-        const response = await fetch(url);
+        const res = await fetch(url);
+        const movies: Movie[] = await res.json();
         
-        if (!response.ok) {
-            throw new Error(`Villa: ${response.status}`);
-        }
-
-        const movies: Movie[] = await response.json();
-
-        // Hreinsum gáminn
         container.innerHTML = '';
-
-        // Tékka hvort eitthvað fannst
+        
         if (movies.length === 0) {
-            container.innerHTML = '<p class="error">Engar myndir fundust.</p>';
+            container.innerHTML = '<p>Engar myndir.</p>';
             return;
         }
 
-        // Teiknum spjöldin
-        for (const movie of movies) {
+        for (const m of movies) {
             const card = document.createElement('article');
             card.className = 'movie-card';
-            
             card.innerHTML = `
-                <div class="poster">${movie.poster}</div>
+                <div class="poster">${m.poster}</div>
                 <div class="info">
-                    <h2>${movie.title}</h2>
-                    <p class="year">${movie.year}</p>
-                    <p class="category">${movie.genre}</p>
-                </div>
-            `;
-            
+                    <h2>${m.title}</h2>
+                    <p>${m.year}</p>
+                    <p style="color:#e50914">${m.genre}</p>
+                </div>`;
             container.appendChild(card);
         }
-
-    } catch (error) {
-        console.error("Villa:", error);
-        if (container) {
-            container.innerHTML = `
-                <div class="error">
-                    <h3>Úbbs!</h3>
-                    <p>Náði ekki sambandi við vefþjóninn.</p>
-                </div>
-            `;
-        }
-    }
+    } catch (e) { console.error(e); }
 }
 
-// 3. Keyra fallið strax í byrjun (sækja allar myndir)
+// Keyra strax í byrjun
 getMovies();
 
-// 4. Hlusta á innslátt í leitarboxið
+// 2. Leit
 if (searchInput) {
-    searchInput.addEventListener('input', (event) => {
-        const target = event.target as HTMLInputElement;
-        const value = target.value;
-        
-        // Hér gætum við sett "Debounce" seinna (bíða í 300ms), 
-        // en köllum strax í getMovies til að byrja með.
-        getMovies(value);
+    searchInput.addEventListener('input', (e) => {
+        getMovies((e.target as HTMLInputElement).value);
+    });
+}
+
+// 3. Modal Takkar (Opna/Loka)
+if (addMovieBtn && modal) {
+    addMovieBtn.addEventListener('click', () => modal.showModal());
+}
+if (closeModalBtn && modal) {
+    closeModalBtn.addEventListener('click', () => modal.close());
+}
+
+// 4. Form Submit (POST)
+if (form) {
+    form.addEventListener('submit', async (event) => {
+        // Stoppa síðuna í að refresh-a
+        event.preventDefault();
+
+        // Ná í gögnin úr forminu
+        const formData = new FormData(form);
+        const newMovie = {
+            title: formData.get('title') as string,
+            year: parseInt(formData.get('year') as string),
+            genre: formData.get('genre') as string,
+            poster: formData.get('poster') as string
+        };
+
+        try {
+            // Senda á serverinn
+            const response = await fetch('http://localhost:3000/api/movies', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newMovie)
+            });
+
+            if (!response.ok) throw new Error('Villa við vistun');
+
+            // Ef allt gekk vel:
+            form.reset();      // Hreinsa formið
+            modal.close();     // Loka glugganum
+            getMovies();       // Sækja listann aftur (uppfæra síðuna)
+
+        } catch (error) {
+            console.error(error);
+            alert('Gat ekki vistað mynd!');
+        }
     });
 }
