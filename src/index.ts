@@ -1,39 +1,43 @@
-// Interface fyrir bíómynd
+// UPPFÆRT INTERFACE (Vika 11)
 interface Movie {
     id: number;
     title: string;
     year: number;
     genre: string;
     poster: string;
+    user_id: number;     // ID á notandanum sem bjó til myndina
+    created_by: string;  // Nafn notandans (frá SQL JOIN)
 }
 
-// --- Náum í elementin úr HTML ---
+// ==========================================
+//      DOM ELEMENTS
+// ==========================================
 
-// 1. Aðal element
+// Aðal
 const container = document.getElementById('movie-container');
 const searchInput = document.getElementById('search-input') as HTMLInputElement;
 
-// 2. Auth Elements (Header)
+// Auth (Header)
 const authButtons = document.getElementById('auth-buttons');
 const userControls = document.getElementById('user-controls');
 const userGreeting = document.getElementById('user-greeting');
 const logoutBtn = document.getElementById('logout-btn');
 
-// 3. Login Modal
+// Login Modal
 const loginBtn = document.getElementById('login-btn');
 const loginModal = document.getElementById('login-modal') as HTMLDialogElement;
 const loginForm = document.getElementById('login-form') as HTMLFormElement;
 const closeLoginBtn = document.getElementById('close-login-btn');
 const loginErrors = document.getElementById('login-errors');
 
-// 4. Register Modal
+// Register Modal
 const registerBtn = document.getElementById('register-btn');
 const registerModal = document.getElementById('register-modal') as HTMLDialogElement;
 const registerForm = document.getElementById('register-form') as HTMLFormElement;
 const closeRegisterBtn = document.getElementById('close-register-btn');
 const registerErrors = document.getElementById('register-errors');
 
-// 5. Movie Modal
+// Movie Modal (Add / Edit)
 const addMovieBtn = document.getElementById('add-movie-btn');
 const movieModal = document.getElementById('add-movie-modal') as HTMLDialogElement;
 const movieForm = document.getElementById('add-movie-form') as HTMLFormElement;
@@ -51,10 +55,12 @@ function checkAuth() {
     const name = localStorage.getItem('name');
 
     if (token && userControls && authButtons && userGreeting) {
+        // Notandi er inni
         authButtons.style.display = 'none';
         userControls.style.display = 'flex';
         userGreeting.textContent = `Hæ, ${name}!`;
     } else if (userControls && authButtons) {
+        // Enginn notandi
         authButtons.style.display = 'flex';
         userControls.style.display = 'none';
     }
@@ -63,31 +69,30 @@ function checkAuth() {
 // Útskráning
 if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
+        // Hreinsum ALLT úr geymslu
         localStorage.removeItem('token');
         localStorage.removeItem('name');
+        localStorage.removeItem('userId'); // MIKILVÆGT: Hreinsa ID líka
+        
         checkAuth();
         window.location.reload();
     });
 }
 
-checkAuth();
+checkAuth(); // Keyra strax
 
 
 // ==========================================
 //      LOGIN LOGIC
 // ==========================================
 
-if (loginBtn && loginModal) {
-    loginBtn.addEventListener('click', () => {
-        if (loginForm) loginForm.reset();
-        if (loginErrors) loginErrors.textContent = "";
-        loginModal.showModal();
-    });
-}
+if (loginBtn) loginBtn.addEventListener('click', () => {
+    if (loginForm) loginForm.reset();
+    if (loginErrors) loginErrors.textContent = "";
+    loginModal.showModal();
+});
 
-if (closeLoginBtn && loginModal) {
-    closeLoginBtn.addEventListener('click', () => loginModal.close());
-}
+if (closeLoginBtn) closeLoginBtn.addEventListener('click', () => loginModal.close());
 
 if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
@@ -95,8 +100,6 @@ if (loginForm) {
         if (loginErrors) loginErrors.textContent = "";
 
         const formData = new FormData(loginForm);
-        
-        // LEIÐRÉTTING 1: Sækjum gögnin handvirkt í stað Object.fromEntries
         const data = {
             username: formData.get('username') as string,
             password: formData.get('password') as string
@@ -116,13 +119,14 @@ if (loginForm) {
                 return;
             }
 
-            // SUCCESS!
+            // SUCCESS: Vistum gögnin
             localStorage.setItem('token', result.token);
             localStorage.setItem('name', result.name);
+            localStorage.setItem('userId', result.id); // NÝTT: Vistum ID til að nota í getMovies
             
             loginModal.close();
             checkAuth();
-            getMovies(); // Sækja aftur til að fá edit takkana
+            getMovies(); // Sækjum myndir aftur til að sýna Edit takka
 
         } catch (error) {
             console.error(error);
@@ -133,7 +137,56 @@ if (loginForm) {
 
 
 // ==========================================
-//      MOVIE CRUD (Með Auth Header!)
+//      REGISTER LOGIC
+// ==========================================
+
+if (registerBtn) registerBtn.addEventListener('click', () => {
+    if (registerForm) registerForm.reset();
+    if (registerErrors) registerErrors.textContent = "";
+    registerModal.showModal();
+});
+
+if (closeRegisterBtn) closeRegisterBtn.addEventListener('click', () => registerModal.close());
+
+if (registerForm) {
+    registerForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (registerErrors) registerErrors.textContent = "";
+
+        const formData = new FormData(registerForm);
+        const data = {
+            name: formData.get('name') as string,
+            username: formData.get('username') as string,
+            password: formData.get('password') as string
+        };
+
+        try {
+            const res = await fetch('http://localhost:3000/api/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            const result = await res.json();
+
+            if (!res.ok) {
+                if (result.errors && registerErrors) registerErrors.textContent = result.errors.join('\n');
+                else alert('Villa: ' + (result.error || 'Óþekkt villa'));
+                return;
+            }
+
+            alert(`Velkomin/n ${result.name}! Aðgangur búinn til.`);
+            registerModal.close();
+        } catch (error) {
+            console.error(error);
+            alert('Kerfisvilla');
+        }
+    });
+}
+
+
+// ==========================================
+//      MOVIE CRUD (Með Eignarhaldi!)
 // ==========================================
 
 async function getMovies(query: string = '') {
@@ -146,14 +199,26 @@ async function getMovies(query: string = '') {
         const movies: Movie[] = await res.json();
         
         container.innerHTML = '';
-        const token = localStorage.getItem('token'); 
+        
+        // Sækjum upplýsingar um hver ÉG er
+        const token = localStorage.getItem('token');
+        const currentUserId = parseInt(localStorage.getItem('userId') || '0');
 
         for (const m of movies) {
             const card = document.createElement('article');
             card.className = 'movie-card';
             
+            // NÝTT: Sýnum hver bjó til myndina
+            // Ef enginn bjó hana til (gamlar myndir), sýnum ekkert
+            const ownerHtml = m.created_by 
+                ? `<p class="owner" style="font-size:0.8rem; color:#888;">👤 ${m.created_by}</p>` 
+                : '';
+
+            // NÝTT: Sýnum bara takka ef ÉG á myndina
+            const isMyMovie = token && (m.user_id === currentUserId);
+
             let actionsHtml = '';
-            if (token) {
+            if (isMyMovie) {
                 actionsHtml = `
                     <div class="card-actions">
                         <button class="btn-icon btn-edit" title="Breyta">✏️</button>
@@ -168,11 +233,13 @@ async function getMovies(query: string = '') {
                     <h2>${m.title}</h2>
                     <p>${m.year}</p>
                     <p style="color:#e50914">${m.genre}</p>
+                    ${ownerHtml}
                 </div>
                 ${actionsHtml}
             `;
 
-            if (token) {
+            // Setjum bara event listeners ef takkarnir eru til (þ.e. ef ég á myndina)
+            if (isMyMovie) {
                 const editBtn = card.querySelector('.btn-edit');
                 const deleteBtn = card.querySelector('.btn-delete');
                 editBtn?.addEventListener('click', () => openEditModal(m));
@@ -185,26 +252,29 @@ async function getMovies(query: string = '') {
 }
 
 
-// DELETE (Með Auth)
+// DELETE (Verndað)
 async function deleteMovie(id: number) {
-    if (!confirm('Eyða?')) return;
-    const token = localStorage.getItem('token'); 
+    if (!confirm('Ertu viss um að þú viljir eyða þessari mynd?')) return;
+    const token = localStorage.getItem('token');
 
     try {
         const res = await fetch(`http://localhost:3000/api/movies/${id}`, {
             method: 'DELETE',
-            headers: { 
-                'Authorization': `Bearer ${token}` 
-            }
+            headers: { 'Authorization': `Bearer ${token}` }
         });
         
-        if (res.ok) getMovies();
-        else alert('Gat ekki eytt (Vantar réttindi?)');
+        if (res.ok) {
+            getMovies();
+        } else {
+            // Ef serverinn segir 403 (Forbidden)
+            const result = await res.json();
+            alert(result.error || 'Gat ekki eytt mynd.');
+        }
     } catch (e) { console.error(e); }
 }
 
 
-// SUBMIT (Með Auth)
+// SUBMIT (POST / PUT)
 if (movieForm) {
     movieForm.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -219,15 +289,14 @@ if (movieForm) {
             poster: formData.get('poster') as string
         };
 
-        const token = localStorage.getItem('token'); 
+        const token = localStorage.getItem('token');
+        const headers = { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        };
 
         try {
             let response;
-            const headers = { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            };
-
             if (id) {
                 response = await fetch(`http://localhost:3000/api/movies/${id}`, {
                     method: 'PUT',
@@ -246,10 +315,7 @@ if (movieForm) {
 
             if (!response.ok) {
                 if (result.errors && formErrors) formErrors.textContent = result.errors.join('\n');
-                
-                // LEIÐRÉTTING 2: Bættum við && formErrors til að laga TS villu
-                else if (result.error && formErrors) formErrors.textContent = result.error; 
-                
+                else if (result.error && formErrors) formErrors.textContent = result.error;
                 return;
             }
 
@@ -265,7 +331,10 @@ if (movieForm) {
 }
 
 
-// Modal Logic
+// ==========================================
+//      MODAL HELPERS
+// ==========================================
+
 function openEditModal(movie: Movie) {
     if(!movieModal || !movieForm || !modalTitle) return;
     modalTitle.textContent = "Breyta Bíómynd";
@@ -285,71 +354,16 @@ if (addMovieBtn) addMovieBtn.addEventListener('click', () => {
     modalTitle!.textContent = "Ný Bíómynd";
     movieModal.showModal();
 });
+
 if (closeModalBtn) closeModalBtn.addEventListener('click', () => movieModal.close());
 
 
 // ==========================================
-//      REGISTER LOGIC (Vika 9)
+//      INITIALIZATION
 // ==========================================
 
-// 1. Opna Register Modal
-if (registerBtn && registerModal) {
-    registerBtn.addEventListener('click', () => {
-        if (registerForm) registerForm.reset();
-        if (registerErrors) registerErrors.textContent = ""; 
-        registerModal.showModal();
-    });
-}
+getMovies();
 
-// 2. Loka Register Modal
-if (closeRegisterBtn && registerModal) {
-    closeRegisterBtn.addEventListener('click', () => registerModal.close());
-}
-
-// 3. Register Submit
-if (registerForm) {
-    registerForm.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        if (registerErrors) registerErrors.textContent = "";
-
-        const formData = new FormData(registerForm);
-        // Hér notum við líka handvirka aðferð til öryggis
-        const userData = {
-            name: formData.get('name') as string,
-            username: formData.get('username') as string,
-            password: formData.get('password') as string
-        };
-
-        try {
-            const response = await fetch('http://localhost:3000/api/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(userData)
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                if (result.errors && registerErrors) {
-                    registerErrors.textContent = result.errors.join('\n');
-                } else {
-                    alert('Villa: ' + (result.error || 'Óþekkt villa'));
-                }
-                return;
-            }
-
-            alert(`Velkomin/n ${result.name}! Aðgangur búinn til.`);
-            registerForm.reset();
-            registerModal.close();
-
-        } catch (error) {
-            console.error(error);
-            alert('Kerfisvilla');
-        }
-    });
-}
-
-// Leitarvirkni
 if (searchInput) {
     searchInput.addEventListener('input', (e) => {
         getMovies((e.target as HTMLInputElement).value);
