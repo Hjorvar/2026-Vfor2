@@ -14,10 +14,37 @@
             <div class="search-container">
                 <input type="text" id="search-input" placeholder="Leita...">
             </div>
-            <button id="register-btn" class="btn-secondary">Nýskráning</button>
-            <button id="add-movie-btn" class="btn-primary">Bæta við +</button>
+            
+            <div id="auth-buttons">
+                <button id="register-btn" class="btn-secondary">Nýskráning</button>
+                <button id="login-btn" class="btn-primary">Innskráning</button>
+            </div>
+
+            <div id="user-controls" style="display: none;">
+                <span id="user-greeting" style="color: white; margin-right: 10px;"></span>
+                <button id="add-movie-btn" class="btn-primary">Bæta við +</button>
+                <button id="logout-btn" class="btn-secondary">Útskrá</button>
+            </div>
         </div>
     </header>
+
+    <dialog id="login-modal">
+        <form id="login-form">
+            <h2>Innskráning</h2>
+            <div id="login-errors" class="error-msg"></div>
+
+            <label>Notendanafn:</label>
+            <input type="text" name="username" required>
+
+            <label>Lykilorð:</label>
+            <input type="password" name="password" required>
+
+            <div class="modal-actions">
+                <button type="button" id="close-login-btn">Hætta við</button>
+                <button type="submit" class="btn-primary">Skrá inn</button>
+            </div>
+        </form>
+    </dialog>
 
     <dialog id="register-modal">
         <form id="register-form">
