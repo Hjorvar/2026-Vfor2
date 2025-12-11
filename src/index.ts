@@ -7,20 +7,22 @@ interface Movie {
     poster: string;
 }
 
-// Náum í elementin úr HTML
+// --- Náum í elementin úr HTML ---
 const container = document.getElementById('movie-container');
 const searchInput = document.getElementById('search-input') as HTMLInputElement;
 
+// Modal og Form element
 const addMovieBtn = document.getElementById('add-movie-btn');
 const closeModalBtn = document.getElementById('close-modal-btn');
 const modal = document.getElementById('add-movie-modal') as HTMLDialogElement;
 const form = document.getElementById('add-movie-form') as HTMLFormElement;
-
-// NÝTT: Við þurfum þetta til að geta breytt titlinum á glugganum ("Ný mynd" vs "Breyta mynd")
 const modalTitle = document.getElementById('modal-title');
 
+// NÝTT: Elementið sem sýnir villuskilaboðin (rauði textinn)
+const formErrors = document.getElementById('form-errors');
 
-// 1. Sækja myndir (GET)
+
+// --- 1. Sækja myndir (GET) ---
 async function getMovies(query: string = '') {
     if (!container) return;
     try {
@@ -41,7 +43,6 @@ async function getMovies(query: string = '') {
             const card = document.createElement('article');
             card.className = 'movie-card';
             
-            // Við bætum við "card-actions" neðst með Edit og Delete tökkum
             card.innerHTML = `
                 <div class="poster">${m.poster}</div>
                 <div class="info">
@@ -55,32 +56,21 @@ async function getMovies(query: string = '') {
                 </div>
             `;
 
-            // Tengjum takkana við föllin okkar
+            // Tengjum takkana
             const editBtn = card.querySelector('.btn-edit');
             const deleteBtn = card.querySelector('.btn-delete');
 
-            editBtn?.addEventListener('click', () => {
-                openEditModal(m); // Opna glugga með gögnum
-            });
-
-            deleteBtn?.addEventListener('click', () => {
-                deleteMovie(m.id); // Eyða mynd
-            });
+            editBtn?.addEventListener('click', () => openEditModal(m));
+            deleteBtn?.addEventListener('click', () => deleteMovie(m.id));
 
             container.appendChild(card);
         }
     } catch (e) { console.error(e); }
 }
 
-// NÝTT: Fall til að eyða (DELETE)
+// --- 2. Eyða mynd (DELETE) ---
 async function deleteMovie(id: number) {
-    console.log("Reyni að eyða mynd nr:", id);
-    // Spyrjum notandann fyrst (öryggisatriði)
-    const confirmDelete = confirm('Ertu viss um að þú viljir eyða þessari mynd?');
-    if (!confirmDelete) {
-        console.log("Hætt við eyðingu");
-        return;
-    }
+    if (!confirm('Ertu viss um að þú viljir eyða þessari mynd?')) return;
 
     try {
         const res = await fetch(`http://localhost:3000/api/movies/${id}`, {
@@ -88,72 +78,81 @@ async function deleteMovie(id: number) {
         });
         
         if (res.ok) {
-            getMovies(); // Uppfæra listann strax eftir eyðingu
+            getMovies(); // Uppfæra listann
         } else {
             alert('Gat ekki eytt mynd.');
         }
     } catch (e) { console.error(e); }
 }
 
-// NÝTT: Fall til að opna modal fyrir breytingar (EDIT)
+// --- 3. Opna modal fyrir Edit ---
 function openEditModal(movie: Movie) {
     if (!modal || !form || !modalTitle) return;
 
-    // 1. Breyta titli á glugga
     modalTitle.textContent = "Breyta Bíómynd";
+    
+    // Hreinsum gamlar villur ef þær voru til staðar
+    if (formErrors) formErrors.textContent = "";
 
-    // 2. Fylla inn í formið með gögnum úr myndinni
-    // Við notum 'as HTMLInputElement' til að TypeScript viti að þetta sé input
+    // Fyllum inn í formið
     (form.elements.namedItem('id') as HTMLInputElement).value = movie.id.toString();
     (form.elements.namedItem('title') as HTMLInputElement).value = movie.title;
     (form.elements.namedItem('year') as HTMLInputElement).value = movie.year.toString();
     (form.elements.namedItem('genre') as HTMLInputElement).value = movie.genre;
     (form.elements.namedItem('poster') as HTMLInputElement).value = movie.poster;
 
-    // 3. Opna gluggann
     modal.showModal();
 }
 
 
+// --- Uppsetning á Event Listeners ---
+
 // Keyra strax í byrjun
 getMovies();
 
-
-// 2. Leit
+// Leit
 if (searchInput) {
     searchInput.addEventListener('input', (e) => {
         getMovies((e.target as HTMLInputElement).value);
     });
 }
 
-
-// 3. Modal Takkar (Opna/Loka)
-// UPPFÆRT: "Bæta við" takkinn þarf núna að HREINSA formið fyrst
+// "Bæta við" takkinn
 if (addMovieBtn && modal && form && modalTitle) {
     addMovieBtn.addEventListener('click', () => {
-        form.reset(); // Hreinsa gamalt textadrasl
-        (form.elements.namedItem('id') as HTMLInputElement).value = ""; // MIKILVÆGT: Hreinsa ID svo við búum til nýtt en breytum ekki gamla
-        modalTitle.textContent = "Ný Bíómynd"; // Breyta titli til baka
+        form.reset(); // Hreinsa formið
+        (form.elements.namedItem('id') as HTMLInputElement).value = ""; // Hreinsa ID
+        
+        // Hreinsa villuskilaboðin líka!
+        if (formErrors) formErrors.textContent = "";
+
+        modalTitle.textContent = "Ný Bíómynd";
         modal.showModal();
     });
 }
 
+// Loka takkinn
 if (closeModalBtn && modal) {
     closeModalBtn.addEventListener('click', () => modal.close());
 }
 
 
-// 4. Form Submit (Höndlar núna bæði POST og PUT)
+// --- 4. FORM SUBMIT (Höndlar Validation Villur) ---
 if (form) {
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
 
-        const formData = new FormData(form);
-        const id = formData.get('id') as string; // Sækjum falda ID-ið
+        // Hreinsa gamlar villur áður en við sendum
+        if (formErrors) formErrors.textContent = "";
 
+        const formData = new FormData(form);
+        const id = formData.get('id') as string;
+
+        // Búum til hlutinn sem við sendum á serverinn
+        // Við notum 'any' eða Type Casting hér til að einfalda, en serverinn sér um validation
         const movieData = {
             title: formData.get('title') as string,
-            year: parseInt(formData.get('year') as string),
+            year: parseInt(formData.get('year') as string), // Serverinn vill tölu
             genre: formData.get('genre') as string,
             poster: formData.get('poster') as string
         };
@@ -161,9 +160,7 @@ if (form) {
         try {
             let response;
 
-            // UPPFÆRT: Rökfræðin fyrir vistun
-            
-            // A. Ef ID er til í forminu -> Þá erum við að UPPFÆRA (PUT)
+            // A. Uppfæra (PUT)
             if (id) {
                 response = await fetch(`http://localhost:3000/api/movies/${id}`, {
                     method: 'PUT',
@@ -171,7 +168,7 @@ if (form) {
                     body: JSON.stringify(movieData)
                 });
             } 
-            // B. Ef ID er tómt -> Þá erum við að BÚA TIL (POST)
+            // B. Búa til (POST)
             else {
                 response = await fetch('http://localhost:3000/api/movies', {
                     method: 'POST',
@@ -180,16 +177,35 @@ if (form) {
                 });
             }
 
-            if (!response.ok) throw new Error('Villa við vistun');
+            // --- NÝTT: Meðhöndlun á svari ---
+            
+            // Við lesum svarið sem JSON (það gæti innihaldið villulista eða nýju myndina)
+            const result = await response.json();
 
-            // Ef allt gekk vel:
+            // Ef serverinn segir að eitthvað sé að (t.d. status 400 eða 500)
+            if (!response.ok) {
+                // Ef þetta eru Zod villur (sem við sendum sem { errors: [...] })
+                if (result.errors && formErrors) {
+                    // Birtum villurnar í rauða boxinu, aðskildar með nýrri línu
+                    formErrors.textContent = result.errors.join('\n');
+                } else {
+                    // Ef þetta er einhver önnur villa (t.d. DB hrundi)
+                    alert('Óvænt villa: ' + (result.error || response.statusText));
+                }
+                
+                // MIKILVÆGT: Við hættum hér! Ekki loka glugganum.
+                // Þá getur notandinn lagað villurnar og reynt aftur.
+                return;
+            }
+
+            // Ef allt gekk vel (Success):
             form.reset();
             modal.close();
             getMovies(); // Uppfæra listann
 
         } catch (error) {
             console.error(error);
-            alert('Gat ekki vistað mynd!');
+            alert('Gat ekki náð sambandi við vefþjón.');
         }
     });
 }

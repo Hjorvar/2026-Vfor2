@@ -121,3 +121,18 @@ button[type="button"] {
 
 .btn-edit:hover { background-color: #0056b3; }
 .btn-delete:hover { background-color: #b30000; }
+
+.error-msg {
+    color: #ff4d4d;
+    background-color: rgba(255, 77, 77, 0.1);
+    padding: 0;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    white-space: pre-line; /* Leyfir nýjar línur */
+}
+
+.error-msg:not(:empty) {
+    padding: 10px; /* Bara hafa padding ef það er texti */
+    border: 1px solid #ff4d4d;
+}
