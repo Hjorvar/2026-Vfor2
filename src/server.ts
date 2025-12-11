@@ -73,6 +73,54 @@ app.post('/api/movies', async (req, res) => {
     }
 });
 
+// 4. NÝTT: Uppfæra mynd (PUT)
+app.put('/api/movies/:id', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        const { title, year, genre, poster } = req.body;
+
+        const sql = `
+            UPDATE movies 
+            SET title = $1, year = $2, genre = $3, poster = $4
+            WHERE id = $5
+            RETURNING *;
+        `;
+        const values = [title, year, genre, poster, id];
+
+        const result = await pool.query(sql, values);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Mynd fannst ekki' });
+        }
+
+        res.json(result.rows[0]);
+
+    } catch (error) {
+        console.error('Villa við uppfærslu:', error);
+        res.status(500).json({ error: 'Gat ekki uppfært mynd' });
+    }
+});
+
+// 5. NÝTT: Eyða mynd (DELETE)
+app.delete('/api/movies/:id', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        
+        const sql = 'DELETE FROM movies WHERE id = $1 RETURNING *';
+        const result = await pool.query(sql, [id]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Mynd fannst ekki' });
+        }
+
+        res.json({ message: 'Mynd eytt', deleted: result.rows[0] });
+
+    } catch (error) {
+        console.error('Villa við eyðingu:', error);
+        res.status(500).json({ error: 'Gat ekki eytt mynd' });
+    }
+});
+
 app.listen(port, () => {
     console.log(`Server is running at http://localhost:${port}`);
 });
