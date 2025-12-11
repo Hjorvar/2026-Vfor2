@@ -1,43 +1,45 @@
-// UPPFÆRT INTERFACE (Vika 11)
+// Interface fyrir bíómynd
 interface Movie {
     id: number;
     title: string;
     year: number;
     genre: string;
     poster: string;
-    user_id: number;     // ID á notandanum sem bjó til myndina
-    created_by: string;  // Nafn notandans (frá SQL JOIN)
+    user_id: number;
+    created_by: string;
 }
 
 // ==========================================
 //      DOM ELEMENTS
 // ==========================================
 
-// Aðal
 const container = document.getElementById('movie-container');
 const searchInput = document.getElementById('search-input') as HTMLInputElement;
 
-// Auth (Header)
+// Pagination Elements (NÝTT)
+const prevPageBtn = document.getElementById('prev-page-btn') as HTMLButtonElement;
+const nextPageBtn = document.getElementById('next-page-btn') as HTMLButtonElement;
+const pageInfo = document.getElementById('page-info');
+
+// Auth Elements
 const authButtons = document.getElementById('auth-buttons');
 const userControls = document.getElementById('user-controls');
 const userGreeting = document.getElementById('user-greeting');
 const logoutBtn = document.getElementById('logout-btn');
 
-// Login Modal
+// Modals & Forms
 const loginBtn = document.getElementById('login-btn');
 const loginModal = document.getElementById('login-modal') as HTMLDialogElement;
 const loginForm = document.getElementById('login-form') as HTMLFormElement;
 const closeLoginBtn = document.getElementById('close-login-btn');
 const loginErrors = document.getElementById('login-errors');
 
-// Register Modal
 const registerBtn = document.getElementById('register-btn');
 const registerModal = document.getElementById('register-modal') as HTMLDialogElement;
 const registerForm = document.getElementById('register-form') as HTMLFormElement;
 const closeRegisterBtn = document.getElementById('close-register-btn');
 const registerErrors = document.getElementById('register-errors');
 
-// Movie Modal (Add / Edit)
 const addMovieBtn = document.getElementById('add-movie-btn');
 const movieModal = document.getElementById('add-movie-modal') as HTMLDialogElement;
 const movieForm = document.getElementById('add-movie-form') as HTMLFormElement;
@@ -45,9 +47,12 @@ const closeModalBtn = document.getElementById('close-modal-btn');
 const modalTitle = document.getElementById('modal-title');
 const formErrors = document.getElementById('form-errors');
 
+// STATE (NÝTT)
+let currentPage = 1;
+
 
 // ==========================================
-//      AUTH STATE (Innskráningarkerfi)
+//      AUTH STATE
 // ==========================================
 
 function checkAuth() {
@@ -55,43 +60,38 @@ function checkAuth() {
     const name = localStorage.getItem('name');
 
     if (token && userControls && authButtons && userGreeting) {
-        // Notandi er inni
         authButtons.style.display = 'none';
         userControls.style.display = 'flex';
         userGreeting.textContent = `Hæ, ${name}!`;
     } else if (userControls && authButtons) {
-        // Enginn notandi
         authButtons.style.display = 'flex';
         userControls.style.display = 'none';
     }
 }
 
-// Útskráning
 if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
-        // Hreinsum ALLT úr geymslu
         localStorage.removeItem('token');
         localStorage.removeItem('name');
-        localStorage.removeItem('userId'); // MIKILVÆGT: Hreinsa ID líka
-        
+        localStorage.removeItem('userId');
         checkAuth();
         window.location.reload();
     });
 }
 
-checkAuth(); // Keyra strax
+checkAuth();
 
 
 // ==========================================
-//      LOGIN LOGIC
+//      LOGIN / REGISTER LOGIC
 // ==========================================
 
+// Login
 if (loginBtn) loginBtn.addEventListener('click', () => {
     if (loginForm) loginForm.reset();
     if (loginErrors) loginErrors.textContent = "";
     loginModal.showModal();
 });
-
 if (closeLoginBtn) closeLoginBtn.addEventListener('click', () => loginModal.close());
 
 if (loginForm) {
@@ -111,7 +111,6 @@ if (loginForm) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
-
             const result = await res.json();
 
             if (!res.ok) {
@@ -119,33 +118,26 @@ if (loginForm) {
                 return;
             }
 
-            // SUCCESS: Vistum gögnin
             localStorage.setItem('token', result.token);
             localStorage.setItem('name', result.name);
-            localStorage.setItem('userId', result.id); // NÝTT: Vistum ID til að nota í getMovies
+            localStorage.setItem('userId', result.id);
             
             loginModal.close();
             checkAuth();
-            getMovies(); // Sækjum myndir aftur til að sýna Edit takka
+            getMovies(searchInput.value, currentPage); 
 
         } catch (error) {
-            console.error(error);
             if (loginErrors) loginErrors.textContent = 'Kerfisvilla';
         }
     });
 }
 
-
-// ==========================================
-//      REGISTER LOGIC
-// ==========================================
-
+// Register
 if (registerBtn) registerBtn.addEventListener('click', () => {
     if (registerForm) registerForm.reset();
     if (registerErrors) registerErrors.textContent = "";
     registerModal.showModal();
 });
-
 if (closeRegisterBtn) closeRegisterBtn.addEventListener('click', () => registerModal.close());
 
 if (registerForm) {
@@ -166,7 +158,6 @@ if (registerForm) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
-
             const result = await res.json();
 
             if (!res.ok) {
@@ -178,7 +169,6 @@ if (registerForm) {
             alert(`Velkomin/n ${result.name}! Aðgangur búinn til.`);
             registerModal.close();
         } catch (error) {
-            console.error(error);
             alert('Kerfisvilla');
         }
     });
@@ -186,36 +176,42 @@ if (registerForm) {
 
 
 // ==========================================
-//      MOVIE CRUD (Með Eignarhaldi!)
+//      MOVIE CRUD (Með Pagination!)
 // ==========================================
 
-async function getMovies(query: string = '') {
+async function getMovies(query: string = '', page: number = 1) {
     if (!container) return;
     try {
-        let url = 'http://localhost:3000/api/movies';
-        if (query) url += `?search=${query}`;
+        // NÝTT: Sendum page og limit í URL
+        let url = `http://localhost:3000/api/movies?page=${page}&limit=10`;
+        if (query) url += `&search=${query}`;
         
         const res = await fetch(url);
-        const movies: Movie[] = await res.json();
+        
+        // NÝTT: Serverinn skilar núna { data, meta }
+        const response = await res.json();
+        const movies: Movie[] = response.data; // Gögnin eru hér
+        const meta = response.meta;           // Upplýsingar um síður eru hér
         
         container.innerHTML = '';
         
-        // Sækjum upplýsingar um hver ÉG er
         const token = localStorage.getItem('token');
         const currentUserId = parseInt(localStorage.getItem('userId') || '0');
+
+        if (movies.length === 0) {
+            container.innerHTML = '<p>Engar myndir fundust.</p>';
+            updatePaginationUI(meta); // Uppfæra takka samt (fela þá/disable)
+            return;
+        }
 
         for (const m of movies) {
             const card = document.createElement('article');
             card.className = 'movie-card';
             
-            // NÝTT: Sýnum hver bjó til myndina
-            // Ef enginn bjó hana til (gamlar myndir), sýnum ekkert
+            const isMyMovie = token && (m.user_id === currentUserId);
             const ownerHtml = m.created_by 
                 ? `<p class="owner" style="font-size:0.8rem; color:#888;">👤 ${m.created_by}</p>` 
                 : '';
-
-            // NÝTT: Sýnum bara takka ef ÉG á myndina
-            const isMyMovie = token && (m.user_id === currentUserId);
 
             let actionsHtml = '';
             if (isMyMovie) {
@@ -238,7 +234,6 @@ async function getMovies(query: string = '') {
                 ${actionsHtml}
             `;
 
-            // Setjum bara event listeners ef takkarnir eru til (þ.e. ef ég á myndina)
             if (isMyMovie) {
                 const editBtn = card.querySelector('.btn-edit');
                 const deleteBtn = card.querySelector('.btn-delete');
@@ -248,13 +243,34 @@ async function getMovies(query: string = '') {
 
             container.appendChild(card);
         }
+
+        // NÝTT: Uppfæra pagination takkana neðst
+        updatePaginationUI(meta);
+
     } catch (e) { console.error(e); }
 }
 
 
-// DELETE (Verndað)
+// NÝTT: Helper fall fyrir UI
+function updatePaginationUI(meta: any) {
+    if (!prevPageBtn || !nextPageBtn || !pageInfo) return;
+
+    if (meta.totalPages === 0) {
+        pageInfo.textContent = "Síða 0 af 0";
+        prevPageBtn.disabled = true;
+        nextPageBtn.disabled = true;
+        return;
+    }
+
+    pageInfo.textContent = `Síða ${meta.page} af ${meta.totalPages}`;
+    prevPageBtn.disabled = !meta.hasPrevPage;
+    nextPageBtn.disabled = !meta.hasNextPage;
+}
+
+
+// DELETE
 async function deleteMovie(id: number) {
-    if (!confirm('Ertu viss um að þú viljir eyða þessari mynd?')) return;
+    if (!confirm('Ertu viss?')) return;
     const token = localStorage.getItem('token');
 
     try {
@@ -264,17 +280,17 @@ async function deleteMovie(id: number) {
         });
         
         if (res.ok) {
-            getMovies();
+            // Endurhlaða núverandi síðu
+            getMovies(searchInput.value, currentPage);
         } else {
-            // Ef serverinn segir 403 (Forbidden)
             const result = await res.json();
-            alert(result.error || 'Gat ekki eytt mynd.');
+            alert(result.error || 'Villa');
         }
     } catch (e) { console.error(e); }
 }
 
 
-// SUBMIT (POST / PUT)
+// SUBMIT (POST/PUT)
 if (movieForm) {
     movieForm.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -321,7 +337,7 @@ if (movieForm) {
 
             movieForm.reset();
             movieModal.close();
-            getMovies();
+            getMovies(searchInput.value, currentPage); // Uppfæra lista
 
         } catch (error) {
             console.error(error);
@@ -332,7 +348,7 @@ if (movieForm) {
 
 
 // ==========================================
-//      MODAL HELPERS
+//      MODAL & PAGINATION EVENTS
 // ==========================================
 
 function openEditModal(movie: Movie) {
@@ -354,18 +370,33 @@ if (addMovieBtn) addMovieBtn.addEventListener('click', () => {
     modalTitle!.textContent = "Ný Bíómynd";
     movieModal.showModal();
 });
-
 if (closeModalBtn) closeModalBtn.addEventListener('click', () => movieModal.close());
 
 
-// ==========================================
-//      INITIALIZATION
-// ==========================================
-
-getMovies();
-
-if (searchInput) {
-    searchInput.addEventListener('input', (e) => {
-        getMovies((e.target as HTMLInputElement).value);
+// NÝTT: Pagination Takkar
+if (prevPageBtn) {
+    prevPageBtn.addEventListener('click', () => {
+        if (currentPage > 1) {
+            currentPage--;
+            getMovies(searchInput.value, currentPage);
+        }
     });
 }
+
+if (nextPageBtn) {
+    nextPageBtn.addEventListener('click', () => {
+        currentPage++;
+        getMovies(searchInput.value, currentPage);
+    });
+}
+
+// Leitarvirkni (Endursetja í síðu 1)
+if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+        currentPage = 1; // RESET
+        getMovies((e.target as HTMLInputElement).value, 1);
+    });
+}
+
+// Initial Load
+getMovies('', 1);

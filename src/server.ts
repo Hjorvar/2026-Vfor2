@@ -22,15 +22,10 @@ const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // "Bearer <token>"
 
-    if (!token) {
-        return res.status(401).json({ error: 'Vantar auðkenningu (Token)' });
-    }
+    if (!token) return res.status(401).json({ error: 'Vantar auðkenningu (Token)' });
 
     jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
-        if (err) {
-            return res.status(403).json({ error: 'Ógilt eða útrunnið Token' });
-        }
-        // Festum notandann við req hlutinn svo við getum notað hann í routes
+        if (err) return res.status(403).json({ error: 'Ógilt eða útrunnið Token' });
         (req as any).user = user;
         next();
     });
@@ -56,7 +51,7 @@ const userSchema = z.object({
 
 
 // ==========================================
-//      AUTH ROUTES (Login / Register)
+//      AUTH ROUTES (Register / Login)
 // ==========================================
 
 // 1. Nýskráning
@@ -78,7 +73,6 @@ app.post('/api/register', async (req, res) => {
         );
         res.status(201).json(result.rows[0]);
     } catch (e) { 
-        console.error(e);
         res.status(500).json({ error: 'Villa við nýskráningu' }); 
     }
 });
@@ -102,45 +96,91 @@ app.post('/api/login', async (req, res) => {
             { expiresIn: '1h' }
         );
 
-        // MIKILVÆGT: Sendum ID með til baka svo framendinn viti "Hver er ég?"
         res.json({ token, name: user.name, username: user.username, id: user.id });
-
     } catch (error) {
-        console.error(error);
         res.status(500).json({ error: 'Villa við innskráningu' });
     }
 });
 
 
 // ==========================================
-//      MOVIE ROUTES (CRUD + Ownership)
+//      MOVIE ROUTES (CRUD + Pagination)
 // ==========================================
 
-// GET /api/movies (Opið öllum - Sækir nafn eiganda með JOIN)
+// GET /api/movies (Með Pagination!)
 app.get('/api/movies', async (req, res) => {
-    const search = req.query.search;
+    const search = req.query.search as string;
+
+    // 1. Lesum Page og Limit úr URL (Default: Síða 1, 10 myndir per síðu)
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    
+    // 2. Reiknum OFFSET (Hversu mörgum myndum á að hoppa yfir?)
+    // Dæmi: Síða 1: offset 0. Síða 2: offset 10.
+    const offset = (page - 1) * limit;
+
     try {
-        // SQL JOIN: Tengjum movies við users til að fá nafnið á þeim sem bjó myndina til
-        let queryText = `
+        // Við þurfum tvær fyrirspurnir: 
+        // A) Telja heildarfjölda mynda (fyrir pagination takkana)
+        // B) Sækja gögnin fyrir þessa tilteknu síðu
+
+        let countQuery = `SELECT COUNT(*) FROM movies`;
+        let dataQuery = `
             SELECT movies.*, users.name as created_by 
             FROM movies 
             LEFT JOIN users ON movies.user_id = users.id
         `;
         
-        let result;
+        // Breytur til að geyma parametra ($1, $2...)
+        const queryParams: any[] = [];
+        const countParams: any[] = [];
+
+        // Ef leit er í gangi, bætum við WHERE skilyrðum
         if (search) {
-            queryText += ' WHERE title ILIKE $1 OR genre ILIKE $1';
-            result = await pool.query(queryText, [`%${search}%`]);
-        } else {
-            queryText += ' ORDER BY movies.id ASC';
-            result = await pool.query(queryText);
+            const whereClause = ` WHERE title ILIKE $1 OR genre ILIKE $1`;
+            countQuery += whereClause;
+            dataQuery += whereClause;
+            
+            queryParams.push(`%${search}%`);
+            countParams.push(`%${search}%`);
         }
-        res.json(result.rows);
+
+        // Bætum við röðun (Nýjustu fyrst) og Pagination (LIMIT/OFFSET)
+        // Við þurfum að passa upp á númerin á $ breytunum
+        // Ef search er til staðar er það $1, þá verður limit $2 og offset $3
+        // Ef search er EKKI til staðar, þá verður limit $1 og offset $2
+        const paramIndexStart = queryParams.length + 1;
+        
+        dataQuery += ` ORDER BY movies.id DESC LIMIT $${paramIndexStart} OFFSET $${paramIndexStart + 1}`;
+        
+        queryParams.push(limit, offset);
+
+        // Keyrum báðar fyrirspurnirnar
+        const countResult = await pool.query(countQuery, countParams);
+        const dataResult = await pool.query(dataQuery, queryParams);
+
+        // Reiknum út pagination upplýsingar
+        const totalItems = parseInt(countResult.rows[0].count);
+        const totalPages = Math.ceil(totalItems / limit);
+
+        // Skilum nýju formi á gögnunum (Umslag)
+        res.json({
+            data: dataResult.rows, // Myndirnar á þessari síðu
+            meta: {
+                total: totalItems,
+                page: page,
+                totalPages: totalPages,
+                hasNextPage: page < totalPages,
+                hasPrevPage: page > 1
+            }
+        });
+
     } catch (e) { 
         console.error(e);
         res.status(500).json({ error: 'Villa við að sækja gögn' }); 
     }
 });
+
 
 // GET /api/movies/:id (Opið öllum)
 app.get('/api/movies/:id', async (req, res) => {
@@ -159,16 +199,15 @@ app.get('/api/movies/:id', async (req, res) => {
 });
 
 
-// POST (Búa til - Verndað - Vistar user_id)
+// POST (Verndað)
 app.post('/api/movies', authenticateToken, async (req, res) => {
     const validation = movieSchema.safeParse(req.body);
     if (!validation.success) return res.status(400).json({ errors: validation.error.issues.map(i => i.message) });
     
     const { title, year, genre, poster } = validation.data;
-    const userId = (req as any).user.id; // Fáum ID úr tokeninu
+    const userId = (req as any).user.id; 
 
     try {
-        // 1. Vista myndina
         const insertSql = `
             INSERT INTO movies (title, year, genre, poster, user_id) 
             VALUES ($1, $2, $3, $4, $5) 
@@ -176,7 +215,7 @@ app.post('/api/movies', authenticateToken, async (req, res) => {
         `;
         const result = await pool.query(insertSql, [title, year, genre, poster, userId]);
         
-        // 2. Sækja myndina aftur með JOIN til að fá nafnið strax (fyrir UI)
+        // Sækja aftur með JOIN
         const newId = result.rows[0].id;
         const joinedResult = await pool.query(`
             SELECT movies.*, users.name as created_by 
@@ -185,38 +224,31 @@ app.post('/api/movies', authenticateToken, async (req, res) => {
         `, [newId]);
 
         res.status(201).json(joinedResult.rows[0]);
-    } catch (e) { 
-        console.error(e);
-        res.status(500).json({ error: 'Villa við vistun' }); 
-    }
+    } catch (e) { res.status(500).json({ error: 'Villa við vistun' }); }
 });
 
 
-// PUT (Uppfæra - Verndað - Aðeins eigandi)
+// PUT (Verndað - Eignarhald)
 app.put('/api/movies/:id', authenticateToken, async (req, res) => {
     const id = parseInt(req.params.id);
-    const userId = (req as any).user.id; // Sá sem er að reyna að breyta
+    const userId = (req as any).user.id;
 
     const validation = movieSchema.safeParse(req.body);
     if (!validation.success) return res.status(400).json({ errors: validation.error.issues.map(i => i.message) });
     const { title, year, genre, poster } = validation.data;
 
     try {
-        // 1. Tékka á eignarhaldi
         const check = await pool.query('SELECT * FROM movies WHERE id = $1', [id]);
         if (check.rows.length === 0) return res.status(404).json({error: 'Fannst ekki'});
         
-        const movie = check.rows[0];
-        
-        if (movie.user_id !== userId) {
-            return res.status(403).json({ error: 'Þú hefur ekki leyfi til að breyta þessari mynd' });
+        if (check.rows[0].user_id !== userId) {
+            return res.status(403).json({ error: 'Þú mátt ekki breyta þessari mynd' });
         }
 
-        // 2. Uppfæra
         const sql = `UPDATE movies SET title=$1, year=$2, genre=$3, poster=$4 WHERE id=$5 RETURNING *`;
         const result = await pool.query(sql, [title, year, genre, poster, id]);
         
-        // Sækja aftur með join fyrir samræmi
+        // Sækja aftur með JOIN
         const joinedResult = await pool.query(`
             SELECT movies.*, users.name as created_by 
             FROM movies LEFT JOIN users ON movies.user_id = users.id 
@@ -228,23 +260,19 @@ app.put('/api/movies/:id', authenticateToken, async (req, res) => {
 });
 
 
-// DELETE (Eyða - Verndað - Aðeins eigandi)
+// DELETE (Verndað - Eignarhald)
 app.delete('/api/movies/:id', authenticateToken, async (req, res) => {
     const id = parseInt(req.params.id);
-    const userId = (req as any).user.id; // Sá sem er að reyna að eyða
+    const userId = (req as any).user.id;
 
     try {
-        // 1. Tékka á eignarhaldi
         const check = await pool.query('SELECT * FROM movies WHERE id = $1', [id]);
         if (check.rows.length === 0) return res.status(404).json({error: 'Fannst ekki'});
         
-        const movie = check.rows[0];
-
-        if (movie.user_id !== userId) {
+        if (check.rows[0].user_id !== userId) {
             return res.status(403).json({ error: 'Þú hefur ekki leyfi til að eyða þessari mynd' });
         }
 
-        // 2. Eyða
         const result = await pool.query('DELETE FROM movies WHERE id = $1 RETURNING *', [id]);
         res.json({ message: 'Eytt', deleted: result.rows[0] });
 
