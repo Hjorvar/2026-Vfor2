@@ -136,3 +136,18 @@ button[type="button"] {
     padding: 10px; /* Bara hafa padding ef það er texti */
     border: 1px solid #ff4d4d;
 }
+
+.btn-secondary {
+    background-color: transparent;
+    color: white;
+    border: 1px solid white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-right: 10px; /* Smá bil */
+}
+
+.btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}

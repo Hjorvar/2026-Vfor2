@@ -10,14 +10,36 @@
 <body>
     <header>
         <h1>🎬 Kvikmyndasafnið</h1>
-        
         <div class="controls">
             <div class="search-container">
                 <input type="text" id="search-input" placeholder="Leita...">
             </div>
+            <button id="register-btn" class="btn-secondary">Nýskráning</button>
             <button id="add-movie-btn" class="btn-primary">Bæta við +</button>
         </div>
     </header>
+
+    <dialog id="register-modal">
+        <form id="register-form">
+            <h2>Búa til aðgang</h2>
+            
+            <div id="register-errors" class="error-msg"></div>
+
+            <label>Nafn:</label>
+            <input type="text" name="name" required placeholder="Jón Jónsson">
+
+            <label>Notendanafn:</label>
+            <input type="text" name="username" required placeholder="jon123">
+
+            <label>Lykilorð:</label>
+            <input type="password" name="password" required placeholder="******">
+
+            <div class="modal-actions">
+                <button type="button" id="close-register-btn">Hætta við</button>
+                <button type="submit" class="btn-primary">Nýskrá</button>
+            </div>
+        </form>
+    </dialog>
 
     <main>
         <div class="movie-grid" id="movie-container"></div>
