@@ -1,88 +1,94 @@
-// --- Hér skilgreinum við hvernig gögnin líta út ---
-// Við skilgreinum interface-ið aftur hér því við getum ekki import-að því auðveldlega frá servernum ennþá.
+// Interface fyrir bíómynd (Nú með ID)
 interface Movie {
+    id: number;
     title: string;
     year: number;
     genre: string;
     poster: string;
 }
 
-// 1. Finnum gáminn í HTML þar sem myndirnar eiga að birtast
+// 1. Náum í elementin úr HTML
 const container = document.getElementById('movie-container');
+const searchInput = document.getElementById('search-input') as HTMLInputElement;
 
-// 2. Búum til ósamstillt (async) fall til að sækja gögnin
-async function getMovies() {
-    
-    // Tékka hvort gámurinn sé til áður en við gerum nokkuð
-    if (!container) {
-        console.error('Fann ekki element með id="movie-container"');
-        return;
-    }
+// 2. Aðalfallið: Sækir myndir (tekur við valfrjálsu leitarorði)
+async function getMovies(query: string = '') {
+    if (!container) return;
 
     try {
-        // Sýna notandanum að við séum að vinna (UX)
-        container.innerHTML = '<p class="loading">Sæki bíómyndir...</p>';
-
-        // --- Hér gerist galdurinn (FETCH) ---
-        console.log('Reyni að tengjast við server...');
-        
-        // Við köllum á Express þjóninn okkar (sem verður að vera í gangi á port 3000)
-        const response = await fetch('http://localhost:3000/api/movies');
-
-        // Tékka hvort serverinn svaraði með villu (t.d. 404 eða 500)
-        if (!response.ok) {
-            throw new Error(`Villa frá vefþjóni: ${response.status}`);
+        // Sýna loading state ef við erum að leita
+        // (Ef þetta er fyrsta hleðsla viljum við kannski ekki hreinsa allt strax, en gerum það hér til einföldunar)
+        if (!query) {
+            container.innerHTML = '<p class="loading">Sæki bíómyndir...</p>';
         }
 
-        // Breytum svarinu úr texta yfir í JSON (fylki af Movie)
+        // Búum til slóðina
+        // Dæmi: http://localhost:3000/api/movies?search=matrix
+        let url = 'http://localhost:3000/api/movies';
+        
+        if (query) {
+            url += `?search=${query}`;
+        }
+
+        // Sækjum gögnin
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`Villa: ${response.status}`);
+        }
+
         const movies: Movie[] = await response.json();
 
-        console.log('Gögn komin:', movies);
-
-        // Hreinsum "Sæki bíómyndir..." textann
+        // Hreinsum gáminn
         container.innerHTML = '';
 
-        // --- Teiknum upp gögnin (Sama rökfræði og í Viku 2) ---
+        // Tékka hvort eitthvað fannst
+        if (movies.length === 0) {
+            container.innerHTML = '<p class="error">Engar myndir fundust.</p>';
+            return;
+        }
+
+        // Teiknum spjöldin
         for (const movie of movies) {
-            
             const card = document.createElement('article');
             card.className = 'movie-card';
-
-            const posterDiv = document.createElement('div');
-            posterDiv.className = 'poster';
-            posterDiv.textContent = movie.poster;
-
-            const infoDiv = document.createElement('div');
-            infoDiv.className = 'info';
-
-            // Notum template literal fyrir innihaldið
-            infoDiv.innerHTML = `
-                <h2>${movie.title}</h2>
-                <p class="year">${movie.year}</p>
-                <p class="category">${movie.genre}</p>
+            
+            card.innerHTML = `
+                <div class="poster">${movie.poster}</div>
+                <div class="info">
+                    <h2>${movie.title}</h2>
+                    <p class="year">${movie.year}</p>
+                    <p class="category">${movie.genre}</p>
+                </div>
             `;
-
-            card.appendChild(posterDiv);
-            card.appendChild(infoDiv);
+            
             container.appendChild(card);
         }
 
     } catch (error) {
-        // Ef eitthvað fer úrskeiðis (t.d. serverinn er slökktur)
-        console.error('VILLA:', error);
-        
-        // Sýnum villuna á skjánum svo notandinn viti hvað gerðist
+        console.error("Villa:", error);
         if (container) {
             container.innerHTML = `
-                <div class="error-message">
-                    <h3>Úbbs! Eitthvað fór úrskeiðis.</h3>
+                <div class="error">
+                    <h3>Úbbs!</h3>
                     <p>Náði ekki sambandi við vefþjóninn.</p>
-                    <p>Er kveikt á honum? (node dist/server.js)</p>
                 </div>
             `;
         }
     }
 }
 
-// 3. Keyrum fallið strax þegar síðan hleðst
+// 3. Keyra fallið strax í byrjun (sækja allar myndir)
 getMovies();
+
+// 4. Hlusta á innslátt í leitarboxið
+if (searchInput) {
+    searchInput.addEventListener('input', (event) => {
+        const target = event.target as HTMLInputElement;
+        const value = target.value;
+        
+        // Hér gætum við sett "Debounce" seinna (bíða í 300ms), 
+        // en köllum strax í getMovies til að byrja með.
+        getMovies(value);
+    });
+}
