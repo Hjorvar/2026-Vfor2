@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine  # Notum létta útgáfu af Postgres
+    container_name: kvikmynda_db
+    restart: always
+    environment:
+      POSTGRES_USER: myuser         # Notandanafn
+      POSTGRES_PASSWORD: mypassword # Lykilorð
+      POSTGRES_DB: moviedb          # Nafn á grunni
+    ports:
+      - "5432:5432"                 # Opnum gáttina út í tölvuna okkar
+    volumes:
+      - pgdata:/var/lib/postgresql/data # Geymum gögnin svo þau hverfi ekki við restart
+
+volumes:
+  pgdata:                           # Skilgreinum volume-ið
