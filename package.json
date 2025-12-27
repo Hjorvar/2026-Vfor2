@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {
-    "start": "ts-node src/index.ts",
-    "build": "tsc"
-  },
+"scripts": {
+  "build": "tsc",
+  "watch": "tsc -w"
+},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Hjorvar/2026-Vfor2.git"
@@ -14,7 +14,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "bugs": {
     "url": "https://github.com/Hjorvar/2026-Vfor2/issues"
   },
